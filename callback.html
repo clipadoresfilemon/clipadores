@@ -1,8 +1,24 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Conectando…</title></head><body style="font-family:-apple-system,sans-serif;text-align:center;margin-top:80px">
-<h2>Conectando ao Mac…</h2>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Conectando · Clipadores Filemon</title>
+<style>body{font-family:-apple-system,Helvetica,Arial,sans-serif;text-align:center;margin-top:80px;color:#222}.ok{color:#0a7d32}.erro{color:#b00020}</style>
+</head><body>
+<h2 id="msg">Conectando ao Mac…</h2>
+<p><a href="index.html">Clipadores Filemon</a></p>
 <script>
-// Endereço de retorno do login (Meta/TikTok exigem https). Repassa o código para o script que está esperando no próprio Mac.
-var q = new URLSearchParams(location.search), porta = (q.get("state") || "").split(".")[0];
-if (/^\d{4,5}$/.test(porta)) location.replace("http://127.0.0.1:" + porta + "/" + location.search);
-else document.body.innerHTML = "<h2>Endereço inválido. Rode o 'Conectar conta' de novo.</h2>";
+// Endereço de retorno do login (Meta/TikTok exigem https). Entrega o código ao programa que espera no próprio Mac
+// e continua nesta página: o código sai da barra de endereço.
+const q = new URLSearchParams(location.search), porta = (q.get("state") || "").split(".")[0];
+const msg = document.getElementById("msg");
+history.replaceState(null, "", location.pathname);
+if (!/^\d{4,5}$/.test(porta)) {
+  msg.className = "erro"; msg.textContent = "Endereço inválido. Rode o \"Conectar\" de novo.";
+} else {
+  fetch(`http://127.0.0.1:${porta}/?${q}`)
+    .then(r => r.json())
+    .then(r => {
+      msg.className = r.ok ? "ok" : "erro";
+      msg.textContent = r.ok ? `Pronto! ${r.rede} conectado. Pode fechar esta aba.` : "Não conectou: " + (r.erro || "erro");
+    })
+    .catch(() => { msg.className = "erro"; msg.textContent = "Não achei o programa no Mac. Rode o \"Conectar\" de novo."; });
+}
 </script></body></html>

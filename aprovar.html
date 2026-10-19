@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aprovar posts · Clipadores Filemon</title>
+<style>
+body{font-family:-apple-system,Helvetica,Arial,sans-serif;max-width:960px;margin:24px auto;padding:0 16px;color:#222;background:#fafafa}
+header a{color:#0a58ca;font-size:14px}.item{display:flex;gap:24px;background:#fff;border:1px solid #ddd;border-radius:12px;padding:16px;margin-bottom:24px;flex-wrap:wrap}
+video{width:270px;border-radius:8px;background:#000}form{flex:1;min-width:280px}label{display:block;margin:8px 0}
+textarea{width:100%;height:90px;font-size:15px}select{font-size:15px;padding:6px}
+button{font-size:15px;background:#fe2c55;color:#fff;border:0;border-radius:6px;padding:10px 18px;cursor:pointer}button:disabled{background:#aaa}
+small{color:#666}.ok{color:#0a7d32;font-weight:600}.erro{color:#b00020;font-weight:600}.marca{display:none;margin-left:24px}
+</style></head><body>
+<header><h1>Aprovar posts</h1><p><small>Clipadores Filemon · revise cada vídeo antes de postar no TikTok.</small>
+<a href="index.html">Início</a> · <a href="privacidade.html">Privacidade</a> · <a href="termos.html">Termos</a></p></header>
+<main id="fila"><p>Carregando a fila…</p></main>
+<script>
+const LOCAL = "http://127.0.0.1:8765";
+const PRIV = {PUBLIC_TO_EVERYONE: "Todos (Everyone)", MUTUAL_FOLLOW_FRIENDS: "Amigos (Friends)",
+              FOLLOWER_OF_CREATOR: "Seguidores (Followers)", SELF_ONLY: "Só eu (Only me)"};
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+
+function caixa(nome, rotulo, desligado) {
+  return `<label><input type="checkbox" name="${nome}" ${desligado ? "disabled" : "checked"}> ${rotulo}` +
+         (desligado ? " <small>(desligado nas configurações da conta)</small>" : "") + "</label>";
+}
+
+function bloco(i) {
+  const c = i.criador || {};
+  const opcoes = (c.privacy_level_options || []).map(o => `<option value="${o}">${PRIV[o] || o}</option>`).join("");
+  return `<div class="item"><video src="${LOCAL}/video/${encodeURIComponent(i.item)}" controls playsinline></video>
+  <form data-item="${esc(i.item)}">
+  <p>Postar no TikTok como <b>@${esc(c.creator_username)}</b> (${esc(c.creator_nickname)})</p>
+  <label>Legenda (caption)<br><textarea name="legenda">${esc(i.legenda)}</textarea></label>
+  <label>Quem pode ver (who can view) <select name="privacidade" required><option value="" selected disabled>Escolha…</option>${opcoes}</select></label>
+  ${caixa("comentarios", "Permitir comentários (Allow comments)", c.comment_disabled)}
+  ${caixa("dueto", "Permitir dueto (Allow Duet)", c.duet_disabled)}
+  ${caixa("stitch", "Permitir stitch (Allow Stitch)", c.stitch_disabled)}
+  <label><input type="checkbox" name="divulgar"> Divulgar conteúdo comercial (Disclose commercial content)</label>
+  <div class="marca">
+    <label><input type="checkbox" name="marca_propria"> Sua marca (Your brand) <small>rótulo "Conteúdo promocional"</small></label>
+    <label><input type="checkbox" name="conteudo_de_marca"> Conteúdo de marca (Branded content) <small>rótulo "Parceria paga"; não pode ser "Só eu"</small></label>
+  </div>
+  <p><small>Ao postar, você concorda com a <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank">Confirmação de Uso de Música do TikTok</a>
+  (e com a <a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank">Política de Conteúdo de Marca</a>, se marcar conteúdo de marca).
+  O vídeo pode levar alguns minutos para aparecer no perfil.</small></p>
+  <button type="submit">Postar no TikTok</button> <span class="resultado"></span></form></div>`;
+}
+
+async function carregar() {
+  const alvo = document.getElementById("fila");
+  let fila;
+  try {
+    fila = await (await fetch(`${LOCAL}/api/fila`)).json();
+  } catch (e) {
+    alvo.innerHTML = `<p class="erro">Não achei o programa no Mac. Dê dois cliques em "Aprovar posts" e recarregue esta página.</p>`;
+    return;
+  }
+  alvo.innerHTML = fila.length ? fila.map(bloco).join("") : "<p>Nada na fila para aprovar.</p>";
+  alvo.querySelectorAll("form").forEach(f => {
+    f.divulgar.onchange = () => f.querySelector(".marca").style.display = f.divulgar.checked ? "block" : "none";
+    f.onsubmit = async ev => {
+      ev.preventDefault();
+      const res = f.querySelector(".resultado"), botao = f.querySelector("button");
+      if (!f.privacidade.value) { res.className = "resultado erro"; res.textContent = "Escolha quem pode ver."; return; }
+      const d = f.divulgar.checked;
+      const corpo = {legenda: f.legenda.value, privacidade: f.privacidade.value,
+                     comentarios: f.comentarios.checked, dueto: f.dueto.checked, stitch: f.stitch.checked,
+                     marca_propria: d && f.marca_propria.checked, conteudo_de_marca: d && f.conteudo_de_marca.checked};
+      botao.disabled = true; res.className = "resultado"; res.textContent = "Enviando… (até 1 min)";
+      try {
+        const r = await (await fetch(`${LOCAL}/api/postar/${encodeURIComponent(f.dataset.item)}`,
+                                     {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(corpo)})).json();
+        if (r.erro) { res.className = "resultado erro"; res.textContent = "Não postou: " + r.erro; botao.disabled = false; return; }
+        res.className = "resultado " + (r.status === "PUBLISH_COMPLETE" ? "ok" : "erro");
+        res.textContent = `TikTok: ${r.status} (${PRIV[r.privacidade] || r.privacidade}). Pode levar alguns minutos para aparecer no perfil.`;
+      } catch (e) {
+        res.className = "resultado erro"; res.textContent = "Falhou a conexão com o Mac."; botao.disabled = false;
+      }
+    };
+  });
+}
+carregar();
+</script></body></html>
